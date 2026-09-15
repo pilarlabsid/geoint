@@ -43,6 +43,8 @@ export default function Map3DView({
   // Keep callback refs updated to avoid re-initializing map
   const onFeatureClickRef = useRef(onFeatureClick);
   const onCameraMoveRef = useRef(onCameraMove);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
+
   useEffect(() => { onFeatureClickRef.current = onFeatureClick; }, [onFeatureClick]);
   useEffect(() => { onCameraMoveRef.current = onCameraMove; }, [onCameraMove]);
 
@@ -126,6 +128,8 @@ export default function Map3DView({
     });
 
     map.on('load', () => {
+      setIsMapLoaded(true);
+
       // 1. Add Image layers from layersConfig
       layersConfig.forEach(l => {
         if (l.type === 'image' && l.bounds) {
@@ -147,12 +151,12 @@ export default function Map3DView({
       });
 
       // 2. Add Vector (GeoJSON) layer for KMZ features
-      const initialActiveFeatures = visibleLayers.flatMap(id => featuresByLayer[id] || []);
+      // Initially empty, updated by the useEffect below
       map.addSource('vector-features-source', {
         type: 'geojson',
         data: {
           type: 'FeatureCollection',
-          features: initialActiveFeatures
+          features: []
         }
       });
 
@@ -222,6 +226,7 @@ export default function Map3DView({
     return () => {
       map.remove();
       mapRef.current = null;
+      setIsMapLoaded(false);
     };
   }, []); // Run once on mount
 
@@ -235,7 +240,7 @@ export default function Map3DView({
     if (source && newUrl) {
       source.setTiles([newUrl.replace('{s}', 'a')]);
     }
-  }, [basemap, basemapsConfig]);
+  }, [basemap, basemapsConfig, isMapLoaded]);
 
   // Update image layers visibility and add missing layers
   useEffect(() => {
@@ -278,7 +283,7 @@ export default function Map3DView({
         }
       }
     });
-  }, [visibleLayers, layersConfig]);
+  }, [visibleLayers, layersConfig, isMapLoaded]);
 
   // Update vector features data when featuresByLayer or visibleLayers changes
   useEffect(() => {
@@ -293,7 +298,7 @@ export default function Map3DView({
         features: activeFeatures
       });
     }
-  }, [featuresByLayer, visibleLayers]);
+  }, [featuresByLayer, visibleLayers, isMapLoaded]);
 
   // Handle fitBounds request
   useEffect(() => {
