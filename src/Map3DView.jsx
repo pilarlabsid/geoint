@@ -73,6 +73,12 @@ export default function Map3DView({
             tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
             encoding: 'terrarium',
             tileSize: 256
+          },
+          'terrain-dem-hillshade': {
+            type: 'raster-dem',
+            tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+            encoding: 'terrarium',
+            tileSize: 256
           }
         },
         layers: [
@@ -84,7 +90,7 @@ export default function Map3DView({
           {
             id: 'hillshade-layer',
             type: 'hillshade',
-            source: 'terrain-dem',
+            source: 'terrain-dem-hillshade',
             paint: {
               'hillshade-exaggeration': 0.6,
               'hillshade-shadow-color': '#020617',
