@@ -318,18 +318,13 @@ export default function App() {
     },
   };
 
-  // Inject cache URLs into layer configs
+  // Inject cache URLs into layer configs. Only use layer.url if caching failed/disabled
   const layersWithCache = useMemo(() => {
     return LAYERS_CONFIG.map(layer => ({
       ...layer,
-      url: (dataUrls && dataUrls[layer.id]) || layer.url
+      url: dataUrls ? (dataUrls[layer.id] || layer.url) : null
     }));
   }, [dataUrls]);
-
-  // Show DataLoader splash until all data is fetched/cached
-  if (dataUrls === null) {
-    return <DataLoader onComplete={(urls) => setDataUrls(urls)} />;
-  }
 
   return (
     <div className="app-container">
@@ -439,6 +434,9 @@ export default function App() {
             <button className="zoom-btn" id="zoom-out" onClick={zoomOut} title="Zoom Out"> <ZoomOut size={16} /></button>
           </div>
         )}
+
+        {/* ── DataLoader Widget ── */}
+        {dataUrls === null && <DataLoader onComplete={(urls) => setDataUrls(urls)} />}
 
         {/* Layer toggle */}
         <div className="layer-toggle-wrap" ref={layerBtnRef}>
