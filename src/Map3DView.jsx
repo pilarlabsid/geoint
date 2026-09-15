@@ -298,9 +298,23 @@ export default function Map3DView({
   // Handle fitBounds request
   useEffect(() => {
     if (!fitBoundsRequest?.bounds || !mapRef.current) return;
-    const [southWest, northEast] = fitBoundsRequest.bounds;
+    
+    const b = fitBoundsRequest.bounds;
+    let swLat, swLng, neLat, neLng;
+    
+    if (Array.isArray(b)) {
+      [[swLat, swLng], [neLat, neLng]] = b;
+    } else if (typeof b.getSouthWest === 'function') {
+      const sw = b.getSouthWest();
+      const ne = b.getNorthEast();
+      swLat = sw.lat; swLng = sw.lng;
+      neLat = ne.lat; neLng = ne.lng;
+    } else {
+      return;
+    }
+
     mapRef.current.fitBounds(
-      [[southWest[1], southWest[0]], [northEast[1], northEast[0]]],
+      [[swLng, swLat], [neLng, neLat]],
       { maxZoom: 18, pitch: 60 }
     );
   }, [fitBoundsRequest]);
