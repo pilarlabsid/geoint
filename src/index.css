@@ -912,3 +912,10 @@ body {
 .kmz-tooltip-3d .maplibregl-popup-tip {
   display: none !important;
 }
+
+
+/* Spin animation for loading icons */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
