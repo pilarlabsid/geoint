@@ -105,12 +105,6 @@ export default function App() {
   const [featuresByLayer, setFeaturesByLayer] = useState({});
   const [layerBoundsMap, setLayerBoundsMap] = useState({});
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [loadingLayers, setLoadingLayers] = useState(() => {
-    // Pre-mark all defaultVisible layers as loading
-    const init = {};
-    LAYERS_CONFIG.filter(l => l.defaultVisible).forEach(l => { init[l.id] = true; });
-    return init;
-  });
 
   /* 2D / 3D Mode */
   const [mapMode, setMapMode] = useState('2d');
@@ -214,15 +208,14 @@ export default function App() {
 
   const handleFeaturesLoaded = useCallback((layerId, feats) => {
     setFeaturesByLayer(prev => ({ ...prev, [layerId]: feats }));
-    setLoadingLayers(prev => { const n = { ...prev }; delete n[layerId]; return n; });
   }, []);
 
   const handleLayerLoadStart = useCallback((layerId) => {
-    setLoadingLayers(prev => ({ ...prev, [layerId]: true }));
+    // legacy
   }, []);
 
   const handleLayerLoadEnd = useCallback((layerId) => {
-    setLoadingLayers(prev => { const n = { ...prev }; delete n[layerId]; return n; });
+    // legacy
   }, []);
 
   const handleBoundsLoaded = useCallback((layerId, bounds) => {
@@ -460,54 +453,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Loading Layer Toast ── */}
-      {Object.keys(loadingLayers).length > 0 && (
-        <div style={{
-          position: 'absolute',
-          bottom: '80px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 1100,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px',
-          pointerEvents: 'none',
-        }}>
-          {Object.keys(loadingLayers).map(layerId => {
-            const layer = LAYERS_CONFIG.find(l => l.id === layerId);
-            return (
-              <div key={layerId} style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                background: 'rgba(15, 23, 42, 0.88)',
-                backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(59, 130, 246, 0.35)',
-                borderRadius: '10px',
-                padding: '8px 16px',
-                color: '#e2e8f0',
-                fontSize: '12px',
-                fontWeight: '500',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-                whiteSpace: 'nowrap',
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
-                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                </svg>
-                <span>Memuat <strong style={{ color: '#60a5fa' }}>{layer?.name || layerId}</strong>...</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Loading overlay ── */}
-      {!isLayersLoaded && (
-        <div className="loading-overlay">
-          <div className="spinner" />
-          <p>Memuat data peta...</p>
-        </div>
-      )}
 
       {/* ── Floating open-sidebar button (visible when sidebar is closed) ── */}
       {!isSidebarOpen && (
