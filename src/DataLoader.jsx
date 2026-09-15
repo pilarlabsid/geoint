@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { loadAllLayers } from './utils/dataCache';
+import { loadAllLayers, loadWithProgress } from './utils/dataCache';
 import { LAYERS_CONFIG } from './config/layers';
 
 const LAYER_SIZES = {
@@ -14,7 +14,7 @@ const LAYER_ICONS = {
   image: '🛰️',
 };
 
-export default function DataLoader({ onComplete }) {
+export default function DataLoader({ onComplete, onLayerReady }) {
   const [progress, setProgress] = useState({});
   const [done, setDone] = useState(false);
   const [error, setError] = useState(null);
@@ -24,7 +24,19 @@ export default function DataLoader({ onComplete }) {
   useEffect(() => {
     const items = LAYERS_CONFIG.map(l => ({ id: l.id, url: l.url }));
 
-    loadAllLayers(items, (prog) => setProgress({ ...prog }))
+    const promises = items.map(({ id, url }) => 
+      loadWithProgress(url, (ratio) => setProgress(prev => ({ ...prev, [id]: ratio })))
+        .catch(err => {
+          console.warn(`[DataLoader] Failed to cache ${id}, falling back to network url.`, err);
+          return url; // Fallback to the original URL if cache/progress fetching fails
+        })
+        .then(blobUrl => {
+          if (onLayerReady) onLayerReady(id, blobUrl);
+          return { id, blobUrl };
+        })
+    );
+
+    Promise.all(promises)
       .then(urlMap => {
         setDone(true);
         setTimeout(() => onComplete(urlMap), 100);

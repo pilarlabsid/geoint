@@ -96,7 +96,7 @@ function formatKey(key) {
    Main App
 ───────────────────────────────── */
 export default function App() {
-  const [dataUrls, setDataUrls] = useState(null); // null = loading, {} = ready
+  const [dataUrls, setDataUrls] = useState({}); // Populated progressively by DataLoader
   const [selectedFeature, setSelectedFeature] = useState(null);
   const hasDefaultKmz = LAYERS_CONFIG.some(l => l.type === 'kmz' && l.defaultVisible);
   const [isLayersLoaded, setIsLayersLoaded] = useState(!hasDefaultKmz);
@@ -318,11 +318,11 @@ export default function App() {
     },
   };
 
-  // Inject cache URLs into layer configs. Only use layer.url if caching failed/disabled
+  // Inject cache URLs into layer configs. Wait for DataLoader to provide the URL.
   const layersWithCache = useMemo(() => {
     return LAYERS_CONFIG.map(layer => ({
       ...layer,
-      url: dataUrls ? (dataUrls[layer.id] || layer.url) : null
+      url: dataUrls[layer.id] || null // null means not downloaded yet
     }));
   }, [dataUrls]);
 
@@ -438,7 +438,7 @@ export default function App() {
         )}
 
         {/* ── DataLoader Widget ── */}
-        {dataUrls === null && <DataLoader onComplete={(urls) => setDataUrls(urls)} />}
+        <DataLoader onLayerReady={(id, url) => setDataUrls(p => ({ ...p, [id]: url }))} onComplete={() => {}} />
 
         {/* Layer toggle */}
         <div className="layer-toggle-wrap" ref={layerBtnRef}>
