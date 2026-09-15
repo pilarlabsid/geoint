@@ -348,6 +348,8 @@ export default function App() {
           >
             <TileLayer key={basemap} {...basemaps[basemap]} />
             {layersWithCache.map(layer => {
+              if (!layer.url) return null; // Wait until DataLoader provides the URL
+
               if (layer.type === 'image') {
                 if (!visibleLayers.includes(layer.id)) return null;
                 return (

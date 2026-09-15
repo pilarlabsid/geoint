@@ -249,6 +249,8 @@ export default function Map3DView({
 
         // Add source if not exists
         if (!map.getSource(sourceId)) {
+          if (!l.url) return; // Wait until URL is available from DataLoader cache
+
           map.addSource(sourceId, {
             type: 'image',
             url: l.url,
