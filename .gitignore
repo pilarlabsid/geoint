@@ -12,15 +12,9 @@ dist
 dist-ssr
 *.local
 
-# Large raster images (hosted separately or built locally)
-public/sendiki*.png
-public/sendiki*.jpg
-public/sendiki*.jp2
-
 # Temp / test files
 test.html
 test.png
-src/assets/hero.png
 process_images.cjs
 
 # Editor directories and files
