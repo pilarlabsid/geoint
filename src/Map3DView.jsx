@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Map as MapLibreMap, NavigationControl, Popup, config } from 'maplibre-gl';
+import { Map as MapLibreMap, NavigationControl, Popup, Marker, config } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { Mouse } from 'lucide-react';
@@ -33,12 +33,14 @@ export default function Map3DView({
   visibleLayers = [],
   layersConfig = [],
   featuresByLayer = {},
+  aircraftData = [],
   fitBoundsRequest,
   onFeatureClick,
   onCameraMove
 }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
+  const aircraftMarkersRef = useRef({});
 
   // Keep callback refs updated to avoid re-initializing map
   const onFeatureClickRef = useRef(onFeatureClick);
@@ -172,7 +174,7 @@ export default function Map3DView({
         source: 'vector-features-source',
         paint: {
           'fill-color': ['coalesce', ['get', '_fillColor'], '#38bdf8'],
-          'fill-opacity': 0.3
+          'fill-opacity': ['coalesce', ['get', '_fillOpacity'], 0.3]
         }
       });
 
@@ -225,6 +227,41 @@ export default function Map3DView({
         map.getCanvas().style.cursor = '';
         tooltipPopup.remove();
       });
+
+      // 3. Add Aircraft Tracking Ground Shadow Layer
+      const shadowSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" width="24" height="24">
+        <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+      </svg>`;
+      const shadowImg = new Image(24, 24);
+      shadowImg.onload = () => {
+        if (!map.hasImage('aircraft-shadow')) map.addImage('aircraft-shadow', shadowImg);
+      };
+      shadowImg.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(shadowSvg);
+
+      map.addSource('aircraft-shadow-source', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+      
+      map.addLayer({
+        id: 'aircraft-shadow-layer',
+        type: 'symbol',
+        source: 'aircraft-shadow-source',
+        layout: {
+          'icon-image': 'aircraft-shadow',
+          'icon-size': 1.1,
+          'icon-rotate': ['get', 'heading'],
+          'icon-pitch-alignment': 'map',
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true
+        },
+        paint: {
+          'icon-opacity': 0.25
+        }
+      });
+
+
     });
 
     mapRef.current = map;
@@ -305,6 +342,132 @@ export default function Map3DView({
       });
     }
   }, [featuresByLayer, visibleLayers, isMapLoaded]);
+
+  // Update Aircraft Tracking Data (Shadows & HTML Markers)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    
+    // 1. Update Ground Shadows
+    const source = map.getSource('aircraft-shadow-source');
+    if (source) {
+      const features = aircraftData
+        .filter(ac => {
+          const lng = ac.lon !== undefined ? ac.lon : ac.lng;
+          return typeof lng === 'number' && typeof ac.lat === 'number';
+        })
+        .map(ac => {
+          const lng = ac.lon !== undefined ? ac.lon : ac.lng;
+          return {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [lng, ac.lat] },
+            properties: { heading: ac.heading || ac.track || 0 }
+          };
+        });
+      source.setData({
+        type: 'FeatureCollection',
+        features
+      });
+    }
+
+    // 2. Update HTML Markers for Elevated 3D View
+    const currentHexes = new Set();
+    
+    aircraftData.forEach(ac => {
+      try {
+        const hex = ac.hex;
+        if (!hex) return;
+        currentHexes.add(hex);
+        
+        const lng = ac.lon !== undefined ? ac.lon : ac.lng;
+        const lat = ac.lat;
+        if (typeof lng !== 'number' || typeof lat !== 'number') return;
+        
+        const heading = ac.heading || ac.track || 0;
+        const alt = ac.altitude || 0;
+        
+        const heightPx = alt > 0 ? Math.max(10, (alt / 40000) * 160) : 0;
+        
+        let markerObj = aircraftMarkersRef.current[hex];
+        
+        if (!markerObj) {
+          const el = document.createElement('div');
+          el.className = 'aircraft-3d-marker';
+          el.style.display = 'flex';
+          el.style.flexDirection = 'column';
+          el.style.alignItems = 'center';
+          el.style.justifyContent = 'flex-end';
+          el.style.pointerEvents = 'none';
+          
+          const m = new Marker({ element: el, anchor: 'bottom' })
+            .setLngLat([lng, lat])
+            .addTo(map);
+            
+          markerObj = { marker: m, el };
+          aircraftMarkersRef.current[hex] = markerObj;
+        }
+        
+        markerObj.marker.setLngLat([lng, lat]);
+        
+        const timeStr = new Date(ac.timestamp || Date.now()).toLocaleTimeString('id-ID', { hour12: false });
+        const altMeters = Math.round(alt * 0.3048);
+        
+        markerObj.el.innerHTML = `
+          <div style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: ${heightPx + 50}px;">
+            
+            <div style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); display: flex; align-items: center; z-index: 10;">
+               
+               <!-- Circle + Plane -->
+               <div class="ac-circle" style="pointer-events: auto; position: relative; width: 44px; height: 44px; background: rgba(255,255,255,0.7); border-radius: 50%; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+                  <div style="transform: rotate(${heading}deg); display: flex;">
+                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#facc15" stroke="#1e293b" stroke-width="1.5" width="24" height="24">
+                       <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+                     </svg>
+                  </div>
+                  
+                  <!-- Tooltip -->
+                  <div class="ac-tooltip" style="position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 6px; background: rgba(30, 41, 59, 0.95); color: white; padding: 6px 10px; border-radius: 6px; font-size: 11px; white-space: nowrap; box-shadow: 0 4px 6px rgba(0,0,0,0.3); opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 20;">
+                    <div style="font-weight: 600; font-size: 12px; margin-bottom: 4px;">Ketinggian: ${altMeters} m</div>
+                    <div style="display: flex; gap: 12px; font-size: 10px; color: #cbd5e1; font-weight: 500;">
+                      <span>${timeStr}</span>
+                      <span>ADS-B</span>
+                    </div>
+                  </div>
+               </div>
+               
+               <!-- Callsign Pill -->
+               <div style="margin-left: 6px; background: rgba(148, 163, 184, 0.85); color: white; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; border: 1px solid rgba(255,255,255,0.4); text-shadow: 0 1px 2px rgba(0,0,0,0.5);">
+                 ${ac.callsign || 'N/A'}
+               </div>
+               
+            </div>
+            
+            <!-- Orange Drop Line -->
+            <div style="width: 1.5px; height: ${heightPx}px; background: rgba(234, 88, 12, 0.8);"></div>
+            
+          </div>
+        `;
+        
+        const circle = markerObj.el.querySelector('.ac-circle');
+        const tooltip = markerObj.el.querySelector('.ac-tooltip');
+        if (circle && tooltip) {
+          circle.onmouseenter = () => { tooltip.style.opacity = '1'; };
+          circle.onmouseleave = () => { tooltip.style.opacity = '0'; };
+        }
+      } catch (err) {
+        console.error("Error updating aircraft marker:", err);
+      }
+    });
+    
+    // Cleanup old markers
+    Object.keys(aircraftMarkersRef.current).forEach(hex => {
+      if (!currentHexes.has(hex)) {
+        aircraftMarkersRef.current[hex].marker.remove();
+        delete aircraftMarkersRef.current[hex];
+      }
+    });
+
+  }, [aircraftData, isMapLoaded]);
 
   // Handle fitBounds request
   useEffect(() => {

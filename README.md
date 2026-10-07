@@ -1,5 +1,12 @@
 # React + Vite
 
+## KMZ map layers
+
+Put `.kmz` files in `src/kmz-layers/`. Vite automatically registers each file as
+a visible map layer during development and production builds. The layer name is
+derived from the filename; use underscores or hyphens for spaces. New files are
+picked up by the dev server, while production deployments require a new build.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:

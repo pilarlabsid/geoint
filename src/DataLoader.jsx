@@ -4,6 +4,8 @@ import { LAYERS_CONFIG } from './config/layers';
 
 const LAYER_SIZES = {
   wiup:     2.3,
+  'kawasan-hutan-tms': 0.13,
+  'wdpa-may2019-idn': 29,
   sendiki1: 32,
   sendiki2: 26,
   sendiki3: 19,

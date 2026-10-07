@@ -9,7 +9,11 @@ export default function KmzLayer({
   onFeatureClick, 
   setKmzLoaded, 
   onFeaturesLoaded,
-  onBoundsLoaded 
+  onBoundsLoaded,
+  categoryColors,
+  categoryProperty,
+  labelProperty,
+  preferredKml,
 }) {
   const map = useMap();
   const loadedLayerRef = useRef(null);
@@ -19,18 +23,42 @@ export default function KmzLayer({
   const setKmzLoadedRef = useRef(setKmzLoaded);
   const onFeaturesLoadedRef = useRef(onFeaturesLoaded);
   const onBoundsLoadedRef = useRef(onBoundsLoaded);
+  const categoryColorsRef = useRef(categoryColors);
+  const categoryPropertyRef = useRef(categoryProperty);
+  const labelPropertyRef = useRef(labelProperty);
 
   useEffect(() => { visibleRef.current = visible; }, [visible]);
   useEffect(() => { onFeatureClickRef.current = onFeatureClick; }, [onFeatureClick]);
   useEffect(() => { setKmzLoadedRef.current = setKmzLoaded; }, [setKmzLoaded]);
   useEffect(() => { onFeaturesLoadedRef.current = onFeaturesLoaded; }, [onFeaturesLoaded]);
   useEffect(() => { onBoundsLoadedRef.current = onBoundsLoaded; }, [onBoundsLoaded]);
+  useEffect(() => { categoryColorsRef.current = categoryColors; }, [categoryColors]);
+  useEffect(() => { categoryPropertyRef.current = categoryProperty; }, [categoryProperty]);
+  useEffect(() => { labelPropertyRef.current = labelProperty; }, [labelProperty]);
 
   useEffect(() => {
     if (!map) return;
     let isMounted = true;
 
     const kmzParser = L.kmzLayer();
+    if (preferredKml) {
+      kmzParser.parse = function (data, props) {
+        const zip = window.JSZip;
+        if (!zip) {
+          this.fire('error', new Error('KMZ parser is missing JSZip'));
+          return;
+        }
+
+        zip.loadAsync(data)
+          .then(archive => {
+            const kml = archive.file(preferredKml);
+            if (!kml) throw new Error(`KML file not found in KMZ: ${preferredKml}`);
+            return kml.async('string');
+          })
+          .then(kml => this._parseKML(kml, props))
+          .catch(error => this.fire('error', error));
+      };
+    }
 
     kmzParser.on('load', function (e) {
       if (!isMounted) return;
@@ -49,10 +77,24 @@ export default function KmzLayer({
         const props = childLayer.feature?.properties ?? {};
 
         const label =
+          props[labelPropertyRef.current] ||
           props.name || props.Name || props.NAME ||
           props.nama || props.NAMA ||
           props['Pemegang Izin'] ||
           'IUP';
+        const categoryKey = categoryPropertyRef.current;
+        const category = String((categoryKey && props[categoryKey]) || props.name || props.Name || props.NAME || props.nama || props.NAMA || '').trim();
+        const categoryColor = categoryColorsRef.current?.[category];
+
+        if (categoryColor && childLayer.setStyle) {
+          childLayer.setStyle({
+            color: categoryColor,
+            fillColor: categoryColor,
+            fillOpacity: 0.72,
+            opacity: 0.95,
+            weight: 1,
+          });
+        }
 
         if (childLayer.getPopup())   childLayer.unbindPopup();
         if (childLayer.getTooltip()) childLayer.unbindTooltip();
@@ -91,8 +133,9 @@ export default function KmzLayer({
           childLayer.feature.properties = {
             ...props,
             _label: label,
-            _fillColor: props.fill || childLayer.options.fillColor || childLayer.options.color || '#38bdf8',
-            _color: props.stroke || childLayer.options.color || '#0284c7'
+            _fillColor: categoryColor || props.fill || childLayer.options.fillColor || childLayer.options.color || '#38bdf8',
+            _color: categoryColor || props.stroke || childLayer.options.color || '#0284c7',
+            _fillOpacity: categoryColor ? 0.72 : 0.3,
           };
           features.push(childLayer.feature);
         }
@@ -134,7 +177,7 @@ export default function KmzLayer({
         loadedLayerRef.current = null;
       }
     };
-  }, [map, url]);
+  }, [map, url, preferredKml]);
 
   // Synchronize visibility changes without reloading KMZ
   useEffect(() => {

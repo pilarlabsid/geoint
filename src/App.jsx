@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, ImageOverlay, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, ImageOverlay, useMap, Marker, Popup } from 'react-leaflet';
 import {
   MapPin, Info, ZoomIn, ZoomOut,
   Search, CheckCircle, XCircle, Loader2, Navigation, Layers,
@@ -130,6 +130,26 @@ export default function App() {
   const [mapCenter, setMapCenter] = useState(initialView.center);
   const [mapZoom, setMapZoom] = useState(initialView.zoom);
   const [fitBounds3D, setFitBounds3D] = useState(null);
+
+  /* Aircraft Tracking State */
+  const [aircrafts, setAircrafts] = useState([]);
+
+  useEffect(() => {
+    const fetchAircrafts = async () => {
+      try {
+        const res = await fetch('http://localhost:10001/aircraft');
+        const data = await res.json();
+        if (data && data.aircraft) {
+          setAircrafts(data.aircraft);
+        }
+      } catch (err) {
+        // silently fail if backend is unreachable
+      }
+    };
+    fetchAircrafts();
+    const interval = setInterval(fetchAircrafts, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const updateHash = useCallback((center, zoom) => {
     const z = Math.round(zoom);
@@ -368,6 +388,10 @@ export default function App() {
                     setKmzLoaded={setIsLayersLoaded}
                     onFeaturesLoaded={(feats) => handleFeaturesLoaded(layer.id, feats)}
                     onBoundsLoaded={(bounds) => handleBoundsLoaded(layer.id, bounds)}
+                    categoryColors={layer.categoryColors}
+                    categoryProperty={layer.categoryProperty}
+                    labelProperty={layer.labelProperty}
+                    preferredKml={layer.preferredKml}
                   />
                 );
               }
@@ -376,6 +400,30 @@ export default function App() {
             <SmoothZoomControl />
             <SearchMarker coord={searchCoord} />
             <MapCameraTracker isActive={mapMode === '2d'} onCameraMove={handleCameraMove} />
+
+            {/* Aircraft Tracking 2D Layer */}
+            {aircrafts.map(ac => {
+              const lng = ac.lon || ac.lng;
+              const heading = ac.heading || ac.track || 0;
+              const speed = ac.speed || ac.ground_speed || 0;
+              const iconHtml = `<div style="transform: rotate(${heading}deg); width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.5));">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#eab308" stroke="#1e293b" stroke-width="1.5" width="24" height="24">
+                  <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+                </svg>
+              </div>`;
+              const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [24, 24], iconAnchor: [12, 12] });
+              return (
+                <Marker key={ac.hex} position={[ac.lat, lng]} icon={icon}>
+                  <Popup>
+                    <div style={{ fontSize: '13px', lineHeight: '1.4' }}>
+                      <strong>{ac.callsign}</strong> {ac.airline ? `(${ac.airline})` : ''}<br/>
+                      <span style={{color: '#666'}}>Type:</span> {ac.aircraft_type || 'N/A'}<br/>
+                      <span style={{color: '#666'}}>Alt:</span> {ac.altitude} ft | <span style={{color: '#666'}}>Spd:</span> {speed} kts
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
           </MapContainer>
         </div>
 
@@ -390,6 +438,7 @@ export default function App() {
               visibleLayers={visibleLayers}
               layersConfig={layersWithCache}
               featuresByLayer={featuresByLayer}
+              aircraftData={aircrafts}
               fitBoundsRequest={fitBounds3D}
               onFeatureClick={handleFeatureClick}
               onCameraMove={(c, z) => {
@@ -555,29 +604,41 @@ export default function App() {
               {layersWithCache.map(layer => {
                 const targetBounds = layer.bounds || layerBoundsMap[layer.id];
                 return (
-                  <div key={layer.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', background: '#1e293b', borderRadius: '6px', border: '1px solid #334155' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#e2e8f0', userSelect: 'none' }}>
-                      <input
-                        type="checkbox"
-                        checked={visibleLayers.includes(layer.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) setVisibleLayers([...visibleLayers, layer.id]);
-                          else setVisibleLayers(visibleLayers.filter(id => id !== layer.id));
-                        }}
-                        style={{ accentColor: '#3b82f6', cursor: 'pointer' }}
-                      />
-                      {layer.name}
-                    </label>
-                    {targetBounds && (
-                      <button
-                        onClick={() => handleZoomToLayer(targetBounds)}
-                        style={{ background: '#2563eb', border: 'none', color: 'white', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', fontWeight: '500', transition: 'background 0.2s' }}
-                        onMouseOver={(e) => e.target.style.background = '#3b82f6'}
-                        onMouseOut={(e) => e.target.style.background = '#2563eb'}
-                        title={`Zoom ke ${layer.name}`}
-                      >
-                        Zoom
-                      </button>
+                  <div key={layer.id}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', background: '#1e293b', borderRadius: '6px', border: '1px solid #334155' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#e2e8f0', userSelect: 'none' }}>
+                        <input
+                          type="checkbox"
+                          checked={visibleLayers.includes(layer.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setVisibleLayers([...visibleLayers, layer.id]);
+                            else setVisibleLayers(visibleLayers.filter(id => id !== layer.id));
+                          }}
+                          style={{ accentColor: '#3b82f6', cursor: 'pointer' }}
+                        />
+                        {layer.name}
+                      </label>
+                      {targetBounds && (
+                        <button
+                          onClick={() => handleZoomToLayer(targetBounds)}
+                          style={{ background: '#2563eb', border: 'none', color: 'white', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', fontWeight: '500', transition: 'background 0.2s' }}
+                          onMouseOver={(e) => e.target.style.background = '#3b82f6'}
+                          onMouseOut={(e) => e.target.style.background = '#2563eb'}
+                          title={`Zoom ke ${layer.name}`}
+                        >
+                          Zoom
+                        </button>
+                      )}
+                    </div>
+                    {layer.legend && (
+                      <div role="list" aria-label={`Legenda ${layer.name}`} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 10px', padding: '8px 10px 2px' }}>
+                        {layer.legend.map(item => (
+                          <div key={item.value} role="listitem" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, fontSize: '11px', color: '#cbd5e1' }}>
+                            <span aria-hidden="true" style={{ width: '10px', height: '10px', flex: '0 0 10px', borderRadius: '2px', background: item.color, border: '1px solid rgba(255,255,255,0.55)' }} />
+                            <span>{item.label}</span>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 );
